@@ -27,7 +27,17 @@ export default function Room() {
 
     s.on("room:users", async ({ users }) => {
       // existing users in room -> create offers to each
-      for (const id of users) await createPeerAndOffer(id);
+      try {
+        for (const id of users) {
+          try {
+            await createPeerAndOffer(id);
+          } catch (e) {
+            console.error(`Failed to create peer for ${id}:`, e);
+          }
+        }
+      } catch (e) {
+        console.error("Error handling room users:", e);
+      }
     });
 
     s.on("room:user-joined", async ({ socketId }) => {
