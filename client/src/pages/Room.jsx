@@ -48,23 +48,37 @@ export default function Room() {
     s.on("room:user-left", ({ socketId }) => cleanupPeer(socketId));
 
     s.on("webrtc:offer", async ({ from, sdp }) => {
-      const pc = await ensurePeer(from, false);
-      await pc.setRemoteDescription(sdp);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      s.emit("webrtc:answer", { to: from, sdp: pc.localDescription });
+      try {
+        const pc = await ensurePeer(from, false);
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        s.emit("webrtc:answer", { to: from, sdp: pc.localDescription });
+      } catch (e) {
+        console.error("Error handling webrtc:offer:", e);
+      }
     });
 
     s.on("webrtc:answer", async ({ from, sdp }) => {
-      const pc = peersRef.current.get(from);
-      if (!pc) return;
-      await pc.setRemoteDescription(sdp);
+      try {
+        const pc = peersRef.current.get(from);
+        if (!pc) return;
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      } catch (e) {
+        console.error("Error handling webrtc:answer:", e);
+      }
     });
 
     s.on("webrtc:ice", async ({ from, candidate }) => {
-      const pc = peersRef.current.get(from);
-      if (!pc) return;
-      try { await pc.addIceCandidate(candidate); } catch {}
+      try {
+        const pc = peersRef.current.get(from);
+        if (!pc) return;
+        if (candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+      } catch (e) {
+        console.error("Error adding ICE candidate:", e);
+      }
     });
 
     // whiteboard events
@@ -90,8 +104,10 @@ export default function Room() {
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peersRef.current.set(remoteId, pc);
 
-    // add tracks
-    localStreamRef.current.getTracks().forEach(t => pc.addTrack(t, localStreamRef.current));
+    // add tracks (only if local stream exists)
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(t => pc.addTrack(t, localStreamRef.current));
+    }
 
     // remote stream
     pc.ontrack = (ev) => {
